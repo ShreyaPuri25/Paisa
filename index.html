@@ -8,11 +8,87 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script>
+  // Robust loader: tries multiple CDNs in order, so a single blocked host
+  // (common in in-app browsers) doesn't break the page.
+  window.__BOOTLOG__ = [];
+  function loadFirst(urls, globalName){
+    return new Promise(function(resolve){
+      var i = 0;
+      function tryNext(){
+        if(typeof window[globalName] !== "undefined"){ return resolve(true); }
+        if(i >= urls.length){ return resolve(false); }
+        var url = urls[i++];
+        var s = document.createElement("script");
+        s.src = url; s.async = false;
+        s.onload = function(){
+          if(typeof window[globalName] !== "undefined"){ resolve(true); }
+          else { tryNext(); }
+        };
+        s.onerror = function(){ window.__BOOTLOG__.push("failed: "+url); tryNext(); };
+        document.head.appendChild(s);
+      }
+      tryNext();
+    });
+  }
+  function showBoot(html){
+    var b=document.getElementById("boot"), m=document.getElementById("bootmsg");
+    if(b&&m){ b.style.display="flex"; m.innerHTML=html; }
+  }
+  (async function(){
+    var ok = true;
+    ok = await loadFirst([
+      "https://unpkg.com/react@18.2.0/umd/react.production.min.js",
+      "https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"
+    ], "React") && ok;
+    ok = await loadFirst([
+      "https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js",
+      "https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"
+    ], "ReactDOM") && ok;
+    await loadFirst([
+      "https://unpkg.com/prop-types@15.8.1/prop-types.min.js",
+      "https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js"
+    ], "PropTypes");
+    await loadFirst([
+      "https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js",
+      "https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js"
+    ], "Recharts");
+    var babelOk = await loadFirst([
+      "https://unpkg.com/@babel/standalone@7.23.5/babel.min.js",
+      "https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"
+    ], "Babel");
+
+    var missing=[];
+    if(typeof React==="undefined") missing.push("React");
+    if(typeof ReactDOM==="undefined") missing.push("ReactDOM");
+    if(!babelOk || typeof Babel==="undefined") missing.push("Babel");
+    if(missing.length){
+      showBoot("Couldn't load: <b>"+missing.join(", ")+"</b> from any CDN.<br><br>"+
+        "You're likely in an <b>in-app browser</b> that blocks external scripts. "+
+        "Tap the <b>•••</b> menu and choose <b>Open in Safari</b> (or Chrome) — it should work there.<br><br>"+
+        "<span style='font-size:12px;color:#5E6B91'>"+(window.__BOOTLOG__.join("<br>")||"")+"</span>");
+      return;
+    }
+    // All good — transform and run the app script
+    // Wait until the app source element is in the DOM, then transform & run.
+    function runApp(){
+      var appScript = document.getElementById("appcode");
+      if(!appScript){ return setTimeout(runApp, 30); }
+      try{
+        var transformed = Babel.transform(appScript.textContent, {presets:["react"]}).code;
+        var run = document.createElement("script");
+        run.textContent = transformed;
+        document.body.appendChild(run);
+      }catch(err){
+        showBoot("The app failed to compile:<br><br><code style='color:#FF8AAE'>"+err.message+"</code>");
+      }
+    }
+    runApp();
+  })();
+</script>
 <style>
   :root{
     --bg:#0B0F1A; --bg2:#0F1524; --panel:#141B2E; --panel2:#1A2238;
@@ -78,9 +154,26 @@
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel" data-presets="react">
+<div id="boot" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;font-family:system-ui;color:#EAF0FF;z-index:9999;background:#0B0F1A">
+  <div style="max-width:520px;text-align:center">
+    <div style="font-size:30px;font-weight:800;background:linear-gradient(135deg,#7C5CFF,#00E0C7);-webkit-background-clip:text;-webkit-text-fill-color:transparent">paisa</div>
+    <div id="bootmsg" style="margin-top:14px;font-size:14px;color:#9AA7C7;line-height:1.6"></div>
+  </div>
+</div>
+<script>
+  // Catch runtime errors after the app starts and surface them instead of blanking.
+  window.addEventListener("error", function(e){
+    if(typeof React==="undefined") return; // load failures handled by the loader below
+    var b=document.getElementById("boot"), m=document.getElementById("bootmsg");
+    if(b&&m && b.style.display!=="flex"){ b.style.display="flex";
+      m.innerHTML="A runtime error occurred:<br><br><code style='color:#FF8AAE'>"+(e.message||e.type)+"</code>"; }
+  });
+</script>
+<script type="text/plain" id="appcode">
 const {useState,useEffect,useMemo,useRef} = React;
-const RC = Recharts;
+const HAS_CHARTS = (typeof Recharts!=="undefined") && Recharts && Recharts.ResponsiveContainer;
+const ChartStub = ()=> <div style={{height:"100%",minHeight:120,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--txt3)",fontSize:13,textAlign:"center",padding:20}}>Chart library didn't load — reload to retry. All other features work.</div>;
+const RC = HAS_CHARTS ? Recharts : new Proxy({}, { get:()=>ChartStub });
 
 /* ---------------- helpers ---------------- */
 const INR=(n)=>"₹"+Math.round(n).toLocaleString("en-IN");
@@ -786,3 +879,4 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
+
