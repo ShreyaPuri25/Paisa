@@ -164,9 +164,18 @@
   // Catch runtime errors after the app starts and surface them instead of blanking.
   window.addEventListener("error", function(e){
     if(typeof React==="undefined") return; // load failures handled by the loader below
-    var b=document.getElementById("boot"), m=document.getElementById("bootmsg");
-    if(b&&m && b.style.display!=="flex"){ b.style.display="flex";
-      m.innerHTML="A runtime error occurred:<br><br><code style='color:#FF8AAE'>"+(e.message||e.type)+"</code>"; }
+    var msg = (e && e.message) ? e.message : "";
+    // Ignore errors injected by the browser itself (reader mode, extensions,
+    // translation tools, etc.) — these aren't from our app.
+    if(/__firefox__|__gCrWeb|reader|extension|chrome-extension|moz-extension|^Script error\.?$/i.test(msg)) return;
+    // Only surface an error if the app actually failed to render anything.
+    setTimeout(function(){
+      var root=document.getElementById("root");
+      if(root && root.children.length>0) return; // app rendered fine; ignore stray error
+      var b=document.getElementById("boot"), m=document.getElementById("bootmsg");
+      if(b&&m && b.style.display!=="flex"){ b.style.display="flex";
+        m.innerHTML="A runtime error occurred:<br><br><code style='color:#FF8AAE'>"+msg+"</code>"; }
+    }, 400);
   });
 </script>
 <script type="text/plain" id="appcode">
@@ -879,4 +888,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
-
